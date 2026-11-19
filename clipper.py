@@ -268,6 +268,11 @@ def cmd_auto(a):
     cc_url = f"https://www.youtube.com/results?search_query={quote_plus(q)}&sp=EgIwAQ%3D%3D"
     entries = json.loads(run(ytdlp() + ["--flat-playlist", "-J", "--playlist-end", "30", cc_url]).stdout).get("entries", [])
     entries = [e for e in entries if (e.get("duration") or 0) >= a.min_seconds]
+    bad = re.compile(a.exclude, re.I)
+    dropped = [e for e in entries if bad.search(e.get("title") or "")]
+    entries = [e for e in entries if not bad.search(e.get("title") or "")]
+    if dropped:
+        print(f"Skipped {len(dropped)} non-gameplay videos (unboxing, settings, trailers, ads...)")
     entries.sort(key=lambda e: -(e.get("view_count") or 0))
     streamers = load(STREAMERS, {})
     made, used, skipped = [], 0, []
@@ -897,6 +902,8 @@ def main():
     s.add_argument("--videos", type=int, default=3, help="how many videos to clip from")
     s.add_argument("--top", type=int, default=3, help="moments per video")
     s.add_argument("--min-seconds", type=int, default=90)
+    s.add_argument("--exclude", default=r"unbox|setting|tips|tricks|should you buy|pre-?order|bonus|hours away|how to|review|trailer|price|deal|cheap|key|g2a|reaction|guide|explained|news",
+                   help="skip videos whose title matches this")
     s.add_argument("--before", type=float, default=8)
     s.add_argument("--after", type=float, default=7)
     s.set_defaults(fn=cmd_auto)
