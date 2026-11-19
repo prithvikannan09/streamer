@@ -268,7 +268,7 @@ def detector():
     return _DETECTOR[0]
 
 
-def scan_sensitive(video, fps=2.0, threshold=0.45, classes=None, pad=1.0):
+def scan_sensitive(video, fps=2.0, threshold=0.30, classes=None, pad=3.0):
     classes = classes or SENSITIVE
     tmp = Path(tempfile.mkdtemp())
     run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", f"fps={fps},scale=640:-2", "-q:v", "4", str(tmp / "f_%06d.jpg")])
@@ -1038,14 +1038,14 @@ def main():
     s = sub.add_parser("scan", help="find nudity in a video (flags time ranges)")
     s.add_argument("video")
     s.add_argument("--fps", type=float, default=2.0)
-    s.add_argument("--threshold", type=float, default=0.45)
+    s.add_argument("--threshold", type=float, default=0.30)
     s.set_defaults(fn=cmd_scan)
 
     s = sub.add_parser("clean", help="cut or blur the flagged parts")
     s.add_argument("video")
     s.add_argument("--mode", choices=["cut", "blur"], default="cut")
     s.add_argument("--fps", type=float, default=2.0)
-    s.add_argument("--threshold", type=float, default=0.45)
+    s.add_argument("--threshold", type=float, default=0.30)
     s.set_defaults(fn=cmd_clean)
 
     s = sub.add_parser("auto", help="search YouTube, auto-clip top Creative Commons videos for EXPECTATION")

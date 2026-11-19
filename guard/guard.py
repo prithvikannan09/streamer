@@ -3,6 +3,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 WS = Path.home() / "Library/Application Support/obs-studio/plugin_config/obs-websocket/config.json"
+STRICT_EXTRA = {"FEMALE_BREAST_COVERED", "BUTTOCKS_COVERED", "FEMALE_GENITALIA_COVERED"}
 SENSITIVE = {"FEMALE_BREAST_EXPOSED", "FEMALE_GENITALIA_EXPOSED", "MALE_GENITALIA_EXPOSED", "BUTTOCKS_EXPOSED", "ANUS_EXPOSED"}
 
 
@@ -15,10 +16,11 @@ def main():
     ap.add_argument("--game-scene", default="GTA 6 Live")
     ap.add_argument("--privacy-scene", default="18+ Privacy")
     ap.add_argument("--eye", default="Stream Guard Eye", help="OBS source with the undelayed game picture")
-    ap.add_argument("--threshold", type=float, default=0.40)
-    ap.add_argument("--hold", type=float, default=3.0, help="seconds of clean frames before showing the game again")
+    ap.add_argument("--threshold", type=float, default=0.30)
+    ap.add_argument("--hold", type=float, default=8.0, help="seconds of clean frames before showing the game again")
     ap.add_argument("--classes", default="")
     ap.add_argument("--test", action="store_true", help="treat FACES as 18+ so you can see the switch work")
+    ap.add_argument("--strict", action="store_true", help="also hide lingerie/pole-dance frames (covers beach swimwear too)")
     a = ap.parse_args()
     classes = set(a.classes.split(",")) if a.classes else SENSITIVE
     if a.test:
@@ -83,7 +85,10 @@ def main():
             time.sleep(0.5)
             continue
         missing_said = False
-        hits = [d for d in det.detect(str(shot)) if d["class"] in classes and d["score"] >= a.threshold]
+        found = det.detect(str(shot))
+        hits = [d for d in found if d["class"] in classes and d["score"] >= a.threshold]
+        if a.strict and not a.test:
+            hits += [d for d in found if d["class"] in STRICT_EXTRA and d["score"] >= 0.50]
         now = time.time()
         if hits:
             last_hit = now
