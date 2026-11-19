@@ -214,20 +214,38 @@ def cmd_find(a):
         if not peaks:
             local = Path(src)
             if is_url:
-                local = dest / "audio_scan.m4a"
+                local = dest / f"audio_scan_{meta.get('id', 'x')}.m4a"
+                for old in dest.glob("audio_scan*"):
+                    old.unlink()
                 print("No replay data; downloading audio only to find loud moments...")
-                run(ytdlp() + ["-f", "bestaudio", "-o", str(local), src])
+                run(ytdlp() + ["--force-overwrites", "-f", "bestaudio[ext=m4a]/bestaudio", "-o", str(local), src])
             print("Scanning loudness (your reactions + big game moments)...")
             peaks, kind = pick_peaks(loudness_curve(local), a.top, a.before + a.after), "loudness spikes"
+            if is_url and local.exists():
+                local.unlink()
         print(f"Found {len(peaks)} moments via {kind}")
+        length = float(meta.get("duration") or 0) if is_url else probe(src)["duration"]
         for i, (t, score) in enumerate(peaks, 1):
             start = max(t - a.before, 0)
+            end = min(t + a.after, length) if length else t + a.after
+            if end - start < 3:
+                print(f"  {i:2}. skipped (too close to the end of the video)")
+                continue
             out = dest / f"{(meta.get('id') or Path(src).stem).replace(' ', '_')}_{i:02}_{int(start)}s.mp4"
-            if is_url:
-                run(ytdlp() + ["-f", "bv*[height<=1080]+ba/b[height<=1080]", "--download-sections", f"*{start:.0f}-{t + a.after:.0f}",
-                               "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-o", str(out), src])
-            else:
-                cut(src, start, a.before + a.after, out)
+            try:
+                if is_url:
+                    sec = ["--download-sections", f"*{start:.0f}-{end:.0f}", "--merge-output-format", "mp4", "-o", str(out), src]
+                    fmt = ["-f", "bv*[height<=1080]+ba/b[height<=1080]"]
+                    r = subprocess.run(ytdlp() + fmt + sec + ["--force-keyframes-at-cuts"], capture_output=True, text=True)
+                    if r.returncode != 0 or not out.exists():
+                        run(ytdlp() + fmt + sec)
+                else:
+                    cut(src, start, end - start, out)
+            except SystemExit:
+                for junk in dest.glob(out.name + "*"):
+                    junk.unlink()
+                print(f"  {i:2}. skipped: couldn't download this moment ({int(start // 60):02}:{int(start % 60):02})")
+                continue
             write_sidecar(out, a.streamer, info, src, start, score, kind, peak_offset=t - start)
             made.append(out)
             print(f"  {i:2}. {int(start // 60):02}:{int(start % 60):02}  score {score:5.1f}  -> {out.name}")

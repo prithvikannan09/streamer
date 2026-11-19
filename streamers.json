@@ -1,10 +1,44 @@
 {
   "LunarGaming": {
     "credit": "youtube.com/@xLunarGaming",
-    "permission": "YouTube Creative Commons (reuse allowed) on: https://www.youtube.com/watch?v=OnWC__OxyTk",
+    "permission": "YouTube Creative Commons (reuse allowed) on: https://www.youtube.com/watch?v=5Up_BRKHKe8, https://www.youtube.com/watch?v=OnWC__OxyTk",
     "cc_only": true,
     "videos": [
+      "https://www.youtube.com/watch?v=5Up_BRKHKe8",
       "https://www.youtube.com/watch?v=OnWC__OxyTk"
+    ]
+  },
+  "GameResource": {
+    "credit": "youtube.com/@GameResourceHD",
+    "permission": "YouTube Creative Commons (reuse allowed) on: https://www.youtube.com/watch?v=mNdDX5KDtoM",
+    "cc_only": true,
+    "videos": [
+      "https://www.youtube.com/watch?v=mNdDX5KDtoM"
+    ]
+  },
+  "G2ACOM": {
+    "credit": "youtube.com/@G2ACOM",
+    "permission": "YouTube Creative Commons (reuse allowed) on: https://www.youtube.com/watch?v=DzUMEO5P62A, https://www.youtube.com/watch?v=VrOqIblaOxQ",
+    "cc_only": true,
+    "videos": [
+      "https://www.youtube.com/watch?v=DzUMEO5P62A",
+      "https://www.youtube.com/watch?v=VrOqIblaOxQ"
+    ]
+  },
+  "DPJ": {
+    "credit": "youtube.com/@dpjsc08",
+    "permission": "YouTube Creative Commons (reuse allowed) on: https://www.youtube.com/watch?v=hwKYt5ST_b4",
+    "cc_only": true,
+    "videos": [
+      "https://www.youtube.com/watch?v=hwKYt5ST_b4"
+    ]
+  },
+  "Vandal": {
+    "credit": "youtube.com/@vandal",
+    "permission": "YouTube Creative Commons (reuse allowed) on: https://www.youtube.com/watch?v=iQlqF0_zDJQ",
+    "cc_only": true,
+    "videos": [
+      "https://www.youtube.com/watch?v=iQlqF0_zDJQ"
     ]
   }
 }
