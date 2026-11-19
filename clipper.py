@@ -257,6 +257,139 @@ def cmd_find(a):
     return made
 
 
+SENSITIVE = {"FEMALE_BREAST_EXPOSED", "FEMALE_GENITALIA_EXPOSED", "MALE_GENITALIA_EXPOSED", "BUTTOCKS_EXPOSED", "ANUS_EXPOSED"}
+_DETECTOR = []
+
+
+def detector():
+    if not _DETECTOR:
+        from nudenet import NudeDetector
+        _DETECTOR.append(NudeDetector())
+    return _DETECTOR[0]
+
+
+def scan_sensitive(video, fps=2.0, threshold=0.45, classes=None, pad=1.0):
+    classes = classes or SENSITIVE
+    tmp = Path(tempfile.mkdtemp())
+    run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", f"fps={fps},scale=640:-2", "-q:v", "4", str(tmp / "f_%06d.jpg")])
+    det = detector()
+    hits = []
+    for f in sorted(tmp.glob("f_*.jpg")):
+        t = (int(f.stem[2:]) - 1) / fps
+        found = [d for d in det.detect(str(f)) if d["class"] in classes and d["score"] >= threshold]
+        if found:
+            hits.append((t, max(d["score"] for d in found), sorted({d["class"] for d in found})))
+    shutil.rmtree(tmp, ignore_errors=True)
+    ranges = []
+    for t, sc, cl in hits:
+        a, b = max(t - pad, 0), t + 1 / fps + pad
+        if ranges and a <= ranges[-1]["end"] + 1.0:
+            r = ranges[-1]
+            r["end"] = max(r["end"], b)
+            r["score"] = max(r["score"], round(sc, 2))
+            r["what"] = sorted(set(r["what"]) | set(cl))
+        else:
+            ranges.append({"start": round(a, 2), "end": round(b, 2), "score": round(sc, 2), "what": cl})
+    return ranges
+
+
+def blur_expr(ranges, offset=0.0, length=None):
+    parts = []
+    for r in ranges:
+        a, b = r["start"] - offset, r["end"] - offset
+        if length is not None and (b < 0 or a > length):
+            continue
+        parts.append(f"between(t,{max(a, 0):.2f},{b:.2f})")
+    return "+".join(parts)
+
+
+def flagged_sheet(video, ranges, dst):
+    from PIL import Image, ImageDraw, ImageFont
+    if not ranges:
+        return
+    tiles = []
+    for r in ranges[:24]:
+        mid = (r["start"] + r["end"]) / 2
+        tmpf = Path(tempfile.mkstemp(suffix=".jpg")[1])
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{mid:.2f}", "-i", str(video), "-frames:v", "1",
+                        "-vf", "scale=24:-2,scale=480:270:flags=neighbor", str(tmpf)])
+        im = Image.open(tmpf).convert("RGB") if tmpf.stat().st_size else Image.new("RGB", (480, 270))
+        im = im.resize((480, 270))
+        d = ImageDraw.Draw(im)
+        f = ImageFont.truetype(font("text"), 40)
+        lab = f"18+  {int(r['start'] // 60):02}:{int(r['start'] % 60):02}-{int(r['end'] // 60):02}:{int(r['end'] % 60):02}"
+        d.text((12, 10), lab, font=f, fill=(255, 60, 60), stroke_width=4, stroke_fill="black")
+        tiles.append(im)
+        tmpf.unlink()
+    cols = 4
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (480 * cols, 270 * rows))
+    for i, im in enumerate(tiles):
+        sheet.paste(im, ((i % cols) * 480, (i // cols) * 270))
+    sheet.save(dst, quality=85)
+
+
+def cmd_scan(a):
+    v = Path(a.video).expanduser()
+    print(f"Scanning {v.name} for nudity ({a.fps} frames/sec)... long videos take a few minutes.")
+    ranges = scan_sensitive(v, fps=a.fps, threshold=a.threshold)
+    side = v.with_name(v.stem + ".sensitive.json")
+    save(side, {"video": str(v), "ranges": ranges, "threshold": a.threshold})
+    if not ranges:
+        print("CLEAN: no nudity detected. Still skim strip-club / romance scenes yourself; the detector can't judge context.")
+        return
+    total = sum(r["end"] - r["start"] for r in ranges)
+    print(f"FLAGGED {len(ranges)} parts, {total:.0f}s in total:")
+    for r in ranges:
+        print(f"  {int(r['start'] // 60):02}:{int(r['start'] % 60):02} - {int(r['end'] // 60):02}:{int(r['end'] % 60):02}  ({', '.join(r['what'])})")
+    sheet = v.with_name(v.stem + ".sensitive.jpg")
+    flagged_sheet(v, ranges, sheet)
+    print(f"SHEET={sheet}")
+    print(f"Next: clipper clean '{v}' --mode cut   (or --mode blur)")
+
+
+def cmd_clean(a):
+    v = Path(a.video).expanduser()
+    side = v.with_name(v.stem + ".sensitive.json")
+    if not side.exists():
+        cmd_scan(argparse.Namespace(video=str(v), fps=a.fps, threshold=a.threshold))
+    ranges = json.loads(side.read_text())["ranges"]
+    out = v.with_name(v.stem + f".clean-{a.mode}.mp4")
+    if not ranges:
+        print("Nothing to clean.")
+        return
+    cond = blur_expr(ranges)
+    if a.mode == "blur":
+        vf = f"boxblur=luma_radius=60:luma_power=4:enable='{cond}'"
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(v), "-vf", vf, *video_encoder(), "-c:a", "copy", str(out)])
+    else:
+        length = probe(v)["duration"]
+        keep, pos = [], 0.0
+        for r in sorted(ranges, key=lambda r: r["start"]):
+            if r["start"] > pos + 0.05:
+                keep.append((pos, r["start"]))
+            pos = max(pos, r["end"])
+        if pos < length - 0.05:
+            keep.append((pos, length))
+        if not keep:
+            die("the whole video is flagged; nothing left to keep")
+        has_audio = probe(v)["audio"]
+        parts, labels = [], ""
+        for k, (a0, b0) in enumerate(keep):
+            parts.append(f"[0:v]trim={a0:.3f}:{b0:.3f},setpts=PTS-STARTPTS[v{k}]")
+            labels += f"[v{k}]"
+            if has_audio:
+                parts.append(f"[0:a]atrim={a0:.3f}:{b0:.3f},asetpts=PTS-STARTPTS[a{k}]")
+                labels += f"[a{k}]"
+        fc = ";".join(parts) + f";{labels}concat=n={len(keep)}:v=1:a={1 if has_audio else 0}[v]" + ("[a]" if has_audio else "")
+        maps = ["-map", "[v]"] + (["-map", "[a]"] if has_audio else [])
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(v), "-filter_complex", fc, *maps,
+             *video_encoder(), "-c:a", "aac", "-b:a", "192k", str(out)])
+        print(f"Removed {sum(r['end'] - r['start'] for r in ranges):.0f}s in {len(ranges)} parts.")
+    print(f"OUTPUT={out}")
+    print(f"Done: {out}")
+
+
 def slug(name):
     return re.sub(r"[^A-Za-z0-9_]+", "", name.replace(" ", "_"))[:40] or "creator"
 
@@ -789,7 +922,12 @@ def render_part(src, start, dur, label, color, caption, credit, handle, freeze, 
         z = f"if(lt({t},0.13),1+0.12*{t}/0.13,if(gt({t},{dur:.2f}),1.12+0.2*min(({t}-{dur:.2f})/{max(freeze, 0.01):.2f},1),1.12))+{kick}"
     else:
         z = f"1+0.06*{t}/{total:.2f}+{kick}"
-    vf = (f"[0:v]fps=30,tpad=stop_mode=clone:stop_duration={freeze or 0},split[a][b];"
+    nsfw = [r for r in scan_sensitive(src) if r["end"] > start and r["start"] < start + dur]
+    pre = ""
+    if nsfw:
+        print(f"  {label}: 18+ content found -> blurred ({', '.join(sorted({w for r in nsfw for w in r['what']}))})")
+        pre = f"boxblur=luma_radius=60:luma_power=4:enable='{blur_expr(nsfw, offset=start, length=dur)}',"
+    vf = (f"[0:v]{pre}fps=30,tpad=stop_mode=clone:stop_duration={freeze or 0},split[a][b];"
           "[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24:2,eq=brightness=-0.18[bg];"
           f"[b]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
           f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x608:fps=30[fg];"
@@ -896,6 +1034,19 @@ def main():
     s.add_argument("--before", type=float, default=20, help="seconds kept before the peak")
     s.add_argument("--after", type=float, default=10, help="seconds kept after the peak")
     s.set_defaults(fn=cmd_find)
+
+    s = sub.add_parser("scan", help="find nudity in a video (flags time ranges)")
+    s.add_argument("video")
+    s.add_argument("--fps", type=float, default=2.0)
+    s.add_argument("--threshold", type=float, default=0.45)
+    s.set_defaults(fn=cmd_scan)
+
+    s = sub.add_parser("clean", help="cut or blur the flagged parts")
+    s.add_argument("video")
+    s.add_argument("--mode", choices=["cut", "blur"], default="cut")
+    s.add_argument("--fps", type=float, default=2.0)
+    s.add_argument("--threshold", type=float, default=0.45)
+    s.set_defaults(fn=cmd_clean)
 
     s = sub.add_parser("auto", help="search YouTube, auto-clip top Creative Commons videos for EXPECTATION")
     s.add_argument("--query", default="gta 6 gameplay")

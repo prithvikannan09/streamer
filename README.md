@@ -33,3 +33,15 @@ Double-click Clipper on the Desktop. Menu:
 - Add an approved streamer -> name, credit, link showing they allow clipping
 - Open Shorts folder
 Clips start at the detected moment automatically. App source: Clipper.applescript (rebuild: osacompile -o ~/Desktop/Clipper.app Clipper.applescript)
+
+## 18+ safety
+- clipper scan VIDEO  -> flags nudity (NudeNet, runs locally), pixelated preview sheet
+- clipper clean VIDEO --mode cut|blur -> removes or blurs flagged parts
+- Shorts (eor) auto-blur any flagged frames
+
+## Stream Guard (live)
+Desktop app "Stream Guard": opens OBS + a Terminal that watches the game through OBS's hidden
+"Stream Guard Eye" source. On nudity it switches the program to the "18+ Privacy" scene (mic stays on,
+game sound hidden), back after 3s clean. Viewers' picture is delayed 500 ms (Render Delay filter + audio
+sync offset) so the cover lands first. Events logged in guard/logs/. "Stream Guard TEST" = faces count as 18+.
+Setup script: guard/setup_obs.py (OBS must be closed). OBS WebSocket password stays in OBS's own config.
