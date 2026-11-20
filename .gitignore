@@ -10,3 +10,5 @@ guard/logs/
 guard/find-window
 guard/__pycache__/
 guard/chatwin
+guard/face_ref.jpg
+guard/face_only.jpg
