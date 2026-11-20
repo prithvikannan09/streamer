@@ -45,3 +45,16 @@ Desktop app "Stream Guard": opens OBS + a Terminal that watches the game through
 game sound hidden), back after 3s clean. Viewers' picture is delayed 500 ms (Render Delay filter + audio
 sync offset) so the cover lands first. Events logged in guard/logs/. "Stream Guard TEST" = faces count as 18+.
 Setup script: guard/setup_obs.py (OBS must be closed). OBS WebSocket password stays in OBS's own config.
+
+## Live streaming setup (OBS 33 + PS Remote Play, Mac)
+- Scene "GTA 6 Live": whole-screen capture of the Remote Play window (crop 240 top / 134 bottom),
+  500 ms Render Delay so Stream Guard reacts before viewers see a frame; game audio +500 ms to match.
+- Facecam: MacBook camera, top-right round bubble with yellow ring; Background Removal plugin
+  (obs-backgroundremoval 1.4.1) blurs the room; crop + circle mask filters.
+- "18+ Privacy" scene: "18+ SCENE SKIPPED" card, facecam and mic stay on, game hidden.
+- Stream Guard (guard/guard.py), medium mode: --threshold 0.35 --hold 5; weak hits must repeat within ~1 s,
+  scores >= 0.5 hide instantly. Watches the undelayed "Stream Guard Eye" source via OBS WebSocket,
+  auto-reconnects if OBS restarts, starts/stops recording with the stream, opens live chat when you go live.
+- Live chat: guard/livechat.sh finds the current live video on @arunthewall and opens guard/chatwin,
+  a small always-on-top chat window (also works over full-screen Remote Play). Build: swiftc -O chatwin.swift -o chatwin
+- Rules while live: Do Not Disturb on, only Remote Play on the Mac screen (OBS shows the whole screen).

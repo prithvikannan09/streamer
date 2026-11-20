@@ -9,3 +9,4 @@ auto_run.log
 guard/logs/
 guard/find-window
 guard/__pycache__/
+guard/chatwin

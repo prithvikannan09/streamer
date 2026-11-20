@@ -79,7 +79,11 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     scene(a.game_scene)
     say(f"Stream Guard ON. Watching the game through OBS. Leave this window open; close it to stop.")
-    rec_check, we_started_rec = 0.0, False
+    rec_check, we_started_rec, recent, chat_opened = 0.0, False, [], False
+    try:
+        we_started_rec = cl.get_stream_status().output_active and cl.get_record_status().output_active
+    except Exception:
+        pass
     while True:
         t0 = time.time()
         if t0 - rec_check > 3:
@@ -87,6 +91,12 @@ def main():
             try:
                 live = cl.get_stream_status().output_active
                 rec = cl.get_record_status().output_active
+                if live and not chat_opened:
+                    subprocess.Popen([str(HERE / "livechat.sh")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                    chat_opened = True
+                    say("You're LIVE -> opening YouTube live chat window")
+                if not live:
+                    chat_opened = False
                 if live and not rec:
                     cl.start_record()
                     we_started_rec = True
@@ -122,7 +132,13 @@ def main():
         found = det.detect(str(shot))
         hits = [d for d in found if d["class"] in classes and d["score"] >= a.threshold]
         if a.strict and not a.test:
-            hits += [d for d in found if d["class"] in STRICT_EXTRA and d["score"] >= 0.50]
+            hits += [d for d in found if d["class"] in STRICT_EXTRA and d["score"] >= 0.60]
+        top = max((d["score"] for d in hits), default=0.0)
+        recent.append(top)
+        del recent[:-5]
+        confirmed = top >= 0.50 or a.test or sum(1 for x in recent if x > 0) >= 2
+        if hits and not confirmed:
+            hits = []
         now = time.time()
         if hits:
             last_hit = now

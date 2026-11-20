@@ -3,5 +3,5 @@ tell application "OBS" to activate
 delay 4
 tell application "Terminal"
 	activate
-	do script quoted form of g & " --strict"
+	do script quoted form of g & " --threshold 0.35 --hold 5"
 end tell
