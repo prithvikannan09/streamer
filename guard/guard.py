@@ -29,13 +29,22 @@ def main():
 
     import obsws_python as obs
     from nudenet import NudeDetector
-    cfg = json.loads(WS.read_text())
-    try:
-        cl = obs.ReqClient(host="localhost", port=cfg["server_port"],
-                           password=cfg["server_password"] if cfg.get("auth_required") else "", timeout=3)
-    except Exception as e:
-        say(f"Can't reach OBS. Open OBS first, then start Stream Guard again. ({type(e).__name__})")
-        sys.exit(1)
+    def connect(wait=True):
+        said = False
+        while True:
+            try:
+                cfg = json.loads(WS.read_text())
+                return obs.ReqClient(host="localhost", port=cfg["server_port"],
+                                     password=cfg["server_password"] if cfg.get("auth_required") else "", timeout=3)
+            except Exception:
+                if not wait:
+                    raise
+                if not said:
+                    say("Waiting for OBS... (open OBS; I'll connect automatically)")
+                    said = True
+                time.sleep(2)
+
+    cl = connect()
     det = NudeDetector()
     logdir = HERE / "logs"
     logdir.mkdir(exist_ok=True)
@@ -70,8 +79,24 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     scene(a.game_scene)
     say(f"Stream Guard ON. Watching the game through OBS. Leave this window open; close it to stop.")
+    rec_check, we_started_rec = 0.0, False
     while True:
         t0 = time.time()
+        if t0 - rec_check > 3:
+            rec_check = t0
+            try:
+                live = cl.get_stream_status().output_active
+                rec = cl.get_record_status().output_active
+                if live and not rec:
+                    cl.start_record()
+                    we_started_rec = True
+                    say("You're LIVE -> recording started automatically")
+                elif not live and rec and we_started_rec:
+                    cl.stop_record()
+                    we_started_rec = False
+                    say("Stream ended -> recording stopped and saved to Movies")
+            except Exception:
+                pass
         try:
             r = cl.get_source_screenshot(a.eye, "jpg", 640, 360, 75)
             shot.write_bytes(base64.b64decode(r.image_data.split(",", 1)[1]))
@@ -79,6 +104,15 @@ def main():
         except Exception:
             ok = False
         if not ok:
+            try:
+                cl.get_version()
+            except Exception:
+                say("Lost OBS (restarted or closed). Reconnecting...")
+                cl = connect()
+                say("Reconnected to OBS.")
+                if hidden:
+                    scene(a.privacy_scene)
+                continue
             if not missing_said:
                 say(f"Can't get the picture from OBS source '{a.eye}'.")
                 missing_said = True
