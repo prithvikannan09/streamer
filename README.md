@@ -1,4 +1,4 @@
-# Clipper — best moments + Expectation vs Reality Shorts
+# Streamer (with Clipper added)
 
 Folder: ~/Desktop/Friday/gaming/clipper   (run commands from Terminal with ./run.sh)
 
